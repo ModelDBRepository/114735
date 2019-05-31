@@ -1,0 +1,86 @@
+func lambda(){local i
+	if(numarg()==0){
+		print "Calculate decay length(um) with"
+		print "  Ra(ohm-cm), Rm(ohm-cm^2), diameter(um)"
+		return 0
+	}
+	i=50*sqrt($2*$3/$1)
+	return i
+}
+//-------------------------------------------------------------------------------
+// Build up a model with three neurons which own Na and K channels acting as 
+// Hodgkin-Huxley model
+
+create neuron[3]
+// create standard hh neurons
+proc NeuronGeometry(){ local i,dlamda,n
+	if(numarg()!=2){
+		print "Create neurons with cell length(um),cell diameter(um)"
+		return
+	}
+	// create standard hh neurons
+	for(i=0; i<3; i+=1){
+		access neuron[i]
+		cm = 1
+		Ra = 35.4	
+		L = $1
+		diam = $2
+		insert hh	
+		ena 		= 50
+		ek  		= -77
+		gnabar_hh 	= 0.12
+		gkbar_hh 	= 0.036
+		gl_hh 		= 0.0003
+		el_hh  		= -54.3
+		dlamda = lambda(Ra,1.0/gl_hh,diam)/50		
+		n= L/dlamda	
+		n = int(n/2)*2+1
+		nseg=n
+	}
+}
+
+NeuronGeometry(5000,25)
+
+//-------------------------------------------------------------------------------
+//construct gap junctions between each neuron pair
+objref gpre[3],gpost[3]
+for(i=0;i<3;i+=1){
+	neuron[i] 	gpre[i]  = new Gap(0.999)
+	neuron[(i+1)%3] 	gpost[i] = new Gap(0.001)
+	setpointer  gpre[i].vnb,  neuron[(i+1)%3].v(0.001)
+	setpointer  gpost[i].vnb, neuron[i].v(0.999)
+}
+//adjust gap junction conductance
+proc gap_r(){local i
+	if(numarg()!=3){
+		print "provide gap_n0-n1 , gap_n1-n2, and gap_n2-n0 value(MOhm)"
+		return
+	}
+	for(i=1;i<=3;i+=1){
+		gpre[i-1].r = $i
+		gpost[i-1].r= $i
+	}
+}
+gap_r(0.9524,0.9524,0.9524)	
+
+//------------------------------------------------------------------------------
+// create two stimuli objects
+access neuron[0]
+objref st[2]
+for(i=0;i<2;i+=1){
+	st[i]		= new IClamp(0.01)
+	st[i].del	= 0.5
+	st[i].dur 	= 0.05
+}
+proc SetST(){
+	if(numarg()==0){
+		print "Set stimulator with interval(ms),st[0] amp,st[1]amp"
+		return
+	}
+	st[1].del = 0.5 + $1	st[0].amp=$2	st[1].amp=$3
+}
+SetST(2,295.5,300)
+dt=0.001
+Dt=0.01
+vinit = -65
+celsius = 25
